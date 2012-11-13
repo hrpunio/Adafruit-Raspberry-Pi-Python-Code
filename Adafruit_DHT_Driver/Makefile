@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS =  -std=c99 -I. -lbcm2835
+CFLAGS =  -std=c99 -I. -lbcm2835 -l rt
 DEPS = 
 OBJ = Adafruit_DHT.o
 
