@@ -17,7 +17,7 @@ function ReadSensor() {
    local WYNIK=""
    local SUCCESS=""
 
-   ## zwiększyłem powtórzenia do 5 (sleep zmniejszony do 5s/było 10)
+   ## max 5 tries:
    for i in 1 2 3 4 5; do
       WYNIK=`sudo $BIN_DIR/Adafruit_DHT $sensorType $sensorId | tr '\n' ' '`
       SUCCESS=`echo $WYNIK | awk ' { if (NF > 10) {print "YES"} else { print "NO"}}'`
@@ -31,7 +31,7 @@ function ReadSensor() {
       sleep $SLEEP_TIME;
       done
 
-      ## Trzy próby okazały się nieudane
+      ## All tries were unsuccessful
       if [ $SUCCESS = "NO" ] ; then
          echo "$sensorId=? $WYNIK" >> $LOG_DIR/DHT22.log
 	 DHT_CURR_TEMP="999.9"
@@ -41,23 +41,25 @@ function ReadSensor() {
 
 echo "@`date "+%Y%m%d%H%M%S"`" >> $LOG_DIR/DHT22.log
 
-## Czujnik w pokoju:
+## Room
 ReadSensor $SENSTYPE "24"
 READINGS="$DHT_CURR_TEMP $DHT_CURR_HUM"
 sleep 12
 
-## Czujnik weranda
+## Porch
 ReadSensor $SENSTYPE "25"
 READINGS="$READINGS $DHT_CURR_TEMP $DHT_CURR_HUM"
 sleep 12
 
-## Czujnik na zewnątrz:
+## Garden
 ReadSensor $SENSTYPE "22"
 READINGS="$READINGS $DHT_CURR_TEMP $DHT_CURR_HUM"
 
-#
+# Format to HTML/Produce charts
 /usr/bin/perl /home/pi/bin/dht2ht.pl > /var/www/stats/DHT22.html
 
-# ** Wyślij na google **
+# Upload to google.docs
 /home/pi/bin/DHT_googledocs.ex.py $READINGS
+
+## all
 
