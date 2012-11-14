@@ -1,89 +1,115 @@
 #!/usr/bin/perl
-##use POSIX qw(log10);
+
 use GD::Graph::lines;
 
-my $DHTLog="/home/pi/Logs/DHT/DHT22.log";
-my %SensorNames = ("24" => 'Pokój', "25" => 'Weranda', "22" => 'Ogród');
-my @Sensors = ("24", "25", "22"); ## ważna jest kolejność
+#  Log file name:
+my $DHTLog='DHT22.log';
+#  It is assumed Log file has the following format (produced by dht2ht.sh):
+#
+#  @20121114160101
+#  24=2 Using pin #24 Data (40): 0x2 0x2b 0x0 0xc6 0xf3 Temp =  19.8 *C, Hum = 55.5 % 
+#  25=1 Using pin #25 Data (40): 0x3 0xde 0x0 0x2d 0xe Temp =  4.5 *C, Hum = 99.0 % 
+#  22=1 Using pin #22 Data (40): 0x2 0xbe 0x0 0xaf 0x6f Temp =  17.5 *C, Hum = 70.2 % 
+#
+# Temperature chart name:
+my $chart_t = "sensirion_t.png";
+# Humidity chart name:
+my $chart_h = "sensirion_h.png";
+# HTML title/creator, etc:
+my $HTML_creator = 'Tomasz Przechlewski';
+my $HTML_title = 'Temperature/humidity measurement';
+my $CSS_dir = "http://pinkaccordions.homelinux.org/style";
+my $JS_dir = "http://pinkaccordions.homelinux.org/script";
+
+# Sensor names:
+my %SensorNames = ( '24' => 'Room', '22' => 'Porch', '25' => 'Garden');
+# Sensors numbers:
+my @Sensors = (24, 25, 22);
+# Sensor colors at charts:
+my @SensorColors = ( 'red', 'blue', 'green', 'magenta', 'orange' );
+
+# How many readings to display?:
+my $max_readings = 240 ;
+
+## Reading the LOG file:
 
 open (DHT, "$DHTLog") || die "cannot open $DHTLog\n";
 
 while (<DHT>) {
-   if (/@/) {$tempNo=0;
-	## wycinamy końcówkę (jezeli konczy się na zero to pełna godzina
-	$date = substr($_, 1, 11) ; 
-   }
-   else {
-	$tempNo++;
-	$_ =~ /\#([0-9][0-9]) /; $sensor_Id = $1;
+  if (/@/) {
+    $tempNo=0;
+    ## seconds are thrown away:
+    $date = substr($_, 1, 11) ;
+  }
+  else {
+    $tempNo++;
+    $_ =~ /\#([0-9][0-9]) /;
+    $sensor_Id = $1;
 
-        if ( $_ =~ /^[0-9]+=\?/) { 
-           $temp = $hum = "x" ; ##$TempDHT{$date}{$sensor_Id} = $HumDHT{$date}{$sensor_Id} = "x"
-        } else {
-           $_ =~ m/Temp\s+=\s+(\-?[0-9\.]+)/; $temp = $1; 
-           $_ =~ m/Hum\s+=\s+(\-?[0-9\.]+)/; $hum = $1; 
- 	   print STDERR "*** $date: t = $temp h = $hum ***\n";
-        }
+    if ( $_ =~ /^[0-9]+=\?/) { 
+      $temp = $hum = "x" ;
+    } else {
+      $_ =~ m/Temp\s+=\s+(\-?[0-9\.]+)/; $temp = $1;
+      $_ =~ m/Hum\s+=\s+(\-?[0-9\.]+)/; $hum = $1;
+      print STDERR "*** $date: t = $temp h = $hum ***\n";
+    }
 
-	if ($date =~ /0$/) { ## Pełna godzina
-           $TempDHT{$date}{$sensor_Id} = "$temp" ;
-           $HumDHT{$date}{$sensor_Id} = "$hum" ;
+    $TempDHT{$date}{$sensor_Id} = "$temp" ;
+    $HumDHT{$date}{$sensor_Id} = "$hum" ;
 
-        }
-   }
+  }
 } ## //while
 
 close (DHT);
 
+## Generating  HTML table:
+## HTML header (possibly needs adoption)
 
 print '<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
    "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
-<head><meta http-equiv="content-type" content="text/html; charset=utf-8" />
-<meta name="DC.date" content="2012-10-4T20:0:43CET"/>
-<meta name="DC.creator" content="Tomasz Przechlewski" />
- <meta name="DC.rights" content="(c) Tomasz Przechlewski"/>
- <link rel="stylesheet" type="text/css" href="/style/tp-base.css" title="ES"/>
- <link rel="alternate stylesheet" type="text/css" href="/style/tp-bw.css" title="NS"/>
- <link rel="alternate stylesheet" type="text/css" href="/style/tp-big.css" title="BS"/>
- <script type="text/javascript" src="/script/tp.js"></script>
- <style type="text/css"> td { padding: 3px 9px 3px 9px ; text-align: right ; }
+<head><meta http-equiv="content-type" content="text/html; charset=utf-8" />';
+print "<meta name='DC.date' content='2012-10-4T20:0:43CET'/>\n"
+  . "<meta name='DC.creator' content='$HTML_creator' />\n"
+  . "<meta name='DC.rights' content='(c) $HTML_creator'/>\n"
+  . "<link rel='stylesheet' type='text/css' href='$CSS_dir/tp-base.css' title='ES'/>"
+  . "<link rel='alternate stylesheet' type='text/css' href='$CSS_dir/tp-bw.css' title='NS'/>"
+  . "<link rel='alternate stylesheet' type='text/css' href='$CSS_dir/tp-big.css' title='BS'/>"
+  . "<script type='text/javascript' src='$JS_dir/tp.js'></script>\n";
+print '<style type="text/css"> td { padding: 3px 9px 3px 9px ; text-align: right ; }
          table { font-family : sans-serif ; border: 1px dotted; }
-         td.t_hdr { text-align: center } td.pv { background: #656dbc } td.qv { background: #656dbc }
-</style>
-<title xml:lang="pl">Pomiar temperatury/wilgotności--stacja meteorologiczna</title>
-<meta name="DC.title" content="Pomiar temperatury/wilgotności--stacja meteorologiczna" /></head><body>';
+         td.t_hdr { text-align: center } td.pv { background: #656dbc } td.qv { background: #656dbc }</style>';
+print "<title xml:lang='pl'>$HTML_title</title>\n";
+print "<meta name='DC.title' content='$HTML_title' /></head><body>\n";
 
-print "<h3>Pomiar temperatury/wilgotności</h3>\n";
+print "<h3>$HTML_title</h3>\n";
 
-print "<p>Temperatura, wilgotność i <a href='http://pl.wikipedia.org/wiki/Temperatura_punktu_rosy'>temperatura
- punktu rosy</a>.  Współrzędne geograficzne punktu pomiaru:
-<a href='http://pinkaccordions.homelinux.org/staff/tp/Geo/show_point.html?lat=54.43966270&amp;lon=18.55015754'>54.43966270/18.55015754</a>.
-Do rejestrowania wykorzystywane są czujniki
-<a href='http://www.flickr.com/photos/tprzechlewski/8164399252/'>DHT-22</a> (firmy
-<a href='https://www.sparkfun.com/products/10167'>SparkFun</a>?)</p>
-<p>Pierwszy pomiar: 20121109_09:30.
-Wykresy: <a href='./DHT22_img.html#temp_'>Temperatura</a>
- | <a href='./DHT22_img.html#hum_'>Wilgotność</a></p>
-<!-- http://proto-pic.co.uk/humidity-and-temperature-sensor-dht22/ -->\n";
+print "<p>Temperature, humidity and <a href='http://en.wikipedia.org/wiki/Dew_point'>Dew
+ point</a> measurement with
+<a href='https://www.sparkfun.com/products/10167'>SparkFun's</a>? DHT-22 sensors.</p>
+<p>Charts: <a href='./$chart_t'>Temperature</a>
+ | <a href='./$chart_h'>Humidity</a></p>\n";
 
+## Print table header
 print "<table class='tr.comment'>\n";
-print "<tr class='main'><td rowspan='2'>Data/Godzina</td><td colspan='2' class='t_hdr'>Pokój (P)</td><td colspan='2' class='t_hdr'>Ogród (O)</td><td colspan='2' class='t_hdr'>Weranda (W)</td><td colspan='3' class='t_hdr'>Punkt rosy</td></tr>"
-	. "<tr class='main'><td>T °C</td><td>H %</td><td>T °C</td><td>H %</td><td>T °C</td><td>H %</td>"
-	#. "<td class='pv'>T24%</td><td class='pv'>T25%</td><td class='pv'>T22%</td>"
- 	#. "<td class='qv'>H24%</td><td class='qv'>H25%</td><td class='qv'>H22%</td>"
-	#. "<td>Mean T</td><td>Sd T</td><td>Mean H</td><td>Sd H</td>";
-	 . "<td>P °C</td><td>O °C</td><td>W °C</td>"
-         . "</tr>\n";
+print "<tr class='main'><td rowspan='2'>Date/Time</td>" ;
 
-## ### ##
+for $sens ( @Sensors ) {  print "<td colspan='3' class='t_hdr'>$SensorNames{$sens}</td>"; }
+
+print  "</tr><tr class='main'>\n";
+
+for $sens ( @Sensors ) {  print "<td>T °C</td><td>H °C</td><td>Dp °C</td>" }
+
+print  "</tr>\n";
+
+## Table body:
 foreach $d (reverse sort keys %TempDHT) {
   $cdt = ${d} ; $cdt = substr($cdt, 0, 8) . "_" . substr($cdt, 8, 2) . ":" . substr($cdt, 10, 1) . "0";
- 
+
    print "<tr><td>$cdt </td>";
-  
-   $row_txt = $row_txt_dewp =  "";
+
+   $row_txt =  "";
 
    push(@TempDates, $d);
 
@@ -94,26 +120,22 @@ foreach $d (reverse sort keys %TempDHT) {
 	 $ct_ = $TempDHT{$d}{$sens} ; $ch_ = $HumDHT{$d}{$sens};
          $sr_temp += $ct_ ; $sr_hum += $ch_ ; $sr_n++;
 
-	 if ($ch_ == 0) {## humidity is 0, ie. missing reading
-	   $dew_point = 0 ; } 
+	 if ($ch_ == 0) {## humidity is 0, ie. missing!
+	   $dew_point = 0 ;
+	 }
 	 else { $dew_point = dewpoint_approximation($ct_, $ch_); }
 
-         ## dodajemy zero po ${d} żeby było ładniej (pełna godzina)
-         $row_txt .= "<td>$ct_ </td><td>$ch_ </td>";   
-	 $row_txt_dewp .= sprintf "<td> %.2f</td>", $dew_point;
+         ## output
+         $row_txt .= sprintf "<td> %.2f</td><td> %.2f</td><td> %.2f</td>", $ct_, $ch_, $dew_point ;
 
-	 ### ## na potrzeby wykresu: ## ###
-	 ### ## print STDERR "???=> $TempDHT{$d}{$sens}\n";
 	 push( @{ $SDataT{$sens} }, $TempDHT{$d}{$sens} );
 	 push( @{ $SDataH{$sens} }, $HumDHT{$d}{$sens} );
          push( @{ $SDataDewP{$sens} }, $dew_point);
-	 ### ##
 
       } else {
-         $row_txt .= "<td>x</td><td> x </td>";   
-	 $row_txt_dewp .= "<td> x </td>";
+         $row_txt .= "<td> x </td><td> x </td><td> x </td>";
 
-	 ### jeżeli nie ma wstaw `0'
+	 ### missing values denote as  `0'
 	 push( @{ $SDataT{$sens} }, 0 );
 	 push( @{ $SDataH{$sens} }, 0 );
          push( @{ $SDataDewP{$sens} }, 0);
@@ -121,147 +143,115 @@ foreach $d (reverse sort keys %TempDHT) {
       }
    }
 
-   ### Policzenie średniej
-   $sr_temp = $sr_temp/$sr_n; $sr_hum = $sr_hum/$sr_n;
-   $row_txt_t = $row_txt_h = "";
+  print "$row_txt</tr>\n";
 
-   my $var_temp = $var_hum = $sr_n = 0;
+  push (@DatyCzasy, substr($date, 0, 10)); # short form of date (for chart)
 
-   for $sens ( @Sensors ) {
-      if (exists ($TempDHT{$d}{$sens})) {
-          #$temp_p = $TempDHT{$d}{$sens}/$sr_temp*100 ;
-          #$hum_p = $HumDHT{$d}{$sens}/$sr_hum*100 ; 
-          #
-	  #$var_temp += ($TempDHT{$d}{$sens} - $sr_temp)*($TempDHT{$d}{$sens} - $sr_temp);
-	  #$var_hum += ($HumDHT{$d}{$sens} - $sr_hum)*($HumDHT{$d}{$sens} - $sr_hum);
-      	  #$sr_n++;
+  $lineNo++;
 
-          ## dodajemy zero po ${d} żeby było ładniej (pełna godzina)
-          $row_txt_t .= sprintf "<td class='pv'>%.2f</td>", $temp_p;
-          $row_txt_h .= sprintf "<td class='qv'>%.2f</td>", $hum_p;
-      }
-      else {
-          $row_txt_t .= "<td>x</td>";
-          $row_txt_h .= "<td>x</td>";
-      }
-   }  
-   
-   #$var_temp = sqrt($var_temp / $sr_n) ;
-   #$var_hum = sqrt($var_hum / $sr_n );
-   #
-   #printf "$row_txt $row_txt_t $row_txt_h <td>%.3f</td><td>%.3f</td><td>%3f</td><td>%.3f</td> </tr>\n",
-   #    $sr_temp, $var_temp, $sr_hum, $var_hum;
-   print "$row_txt $row_txt_dewp </tr>\n";
+  if ($lineNo > $max_readings ) { last ; }
+}
 
-   push (@DatyCzasy, substr($date, 0, 10)); # drukowana data jest skrócona
-
-   $lineNo++;
-
-   if ($lineNo > 240 ) { last ; }
- }
+## HTML footer (possibly needs adoption)
 
 print "</table>\n";
-print "<p>$lineNo odczytów</p>\n";
+print "<p>Number of readings: $lineNo</p>\n";
 
 print "<p><a href='../index.html' class='bfooter' ><img longdesc='[[back.png'
-src='/icons/back.png' alt='Powrót'/>Powrót</a></p>\n";
+src='/icons/back.png' alt='Back'/>Back</a></p>\n";
 
 print "</body></html>\n";
 
-## ###
-my $chart__name__t = "/var/www/stats/sensirion_t.png";
-my $chart__name__h = "/var/www/stats/sensirion_h.png";
+### ### ### Charts:
 
 my $lst_day = $DatyCzasy[$#DatyCzasy];
 my $fst_day = $DatyCzasy[0];
-
-##my @Kolory = ( 'green', '#FF8C00', 'red', 'blue', '#5CB3FF', 'black' );
 my $BaselineKolor = 'black';
-my $BaseLineStyle = 3; # linia kropkowana
+my $BaseLineStyle = 3; # dotted line
 my $NormalLineStyle = 1;
 my $chart_width = 820;
 my $chart_height = 500 ;
 my $long_ticks = 0 ;
 my $xskip = 24 ;
-my $mov_avg_pts = 0; ## not used (yet!)
+my $x_label_txt = 'Time';
 
 @TempDates = reverse(@TempDates);
 
+# Temperature:
+
 my @data = \@TempDates; ##
 
-my @tmp__ = keys %SensorNames ;  
+my @LineStyles = ( (1) x ($#Sensors + 1), (3) x ($#Sensors + 1));
 
-$SensorTNo = $#tmp__ + 6; ## dew point
-## @LineStyles to array zawierajacy $#SensorTNo jedynek :
-my @LineStyles = ((1, 3) x $SensorTNo);
+##print STDERR "@LineStyles\n";
 
-for $s ( @Sensors ) {
-    @{$SDataT{$s}} = reverse @{$SDataT{$s}}; 
-    push (@data, $SDataT{$s} );
+for $s ( @Sensors ) { @{$SDataT{$s}} = reverse @{$SDataT{$s}}; 
+  push (@data, $SDataT{$s} );  }
 
-    @{$SDataDewP{$s}} = reverse @{$SDataDewP{$s}}; 
-    push (@data, $SDataDewP{$s} ); ## dew point
- }
+## DewPoint:
+for $s ( @Sensors ) { @{$SDataDewP{$s}} = reverse @{$SDataDewP{$s}}; 
+  push (@data, $SDataDewP{$s} );  }
 
-my @Kolory = ( 'red', 'red', 'blue', '#5CB3FF', 'green', 'green', 'black' ); # ostatni kolor to kolor y=0
-my @legend_All_Sensors = ("P", "PRp", "O", "PRo", "W", "PRw");
-draw_chart(\@data, \@legend_All_Sensors, 40, -25, 13, $chart__name__t, "Temperatura/Punkt rosy", "Temp. [C]" );
+@Kolory = ( @SensorColors[0..$#Sensors], @SensorColors[0..$#Sensors] );
 
-## Wykres wilgotnosci: ### ### #### #### #### #### ### #### #### #### #### ####
+my @legend = ();
 
-my @data = \@TempDates; 
+for $s ( @Sensors ) { push @legend, $SensorNames{$s} } 
+## Add dew point to legend:
+for $s ( @Sensors ) { push @legend, "$SensorNames{$s}/Dp" } 
 
-$SensorTNo = $#tmp__ + 1;
-## jeżeli my @LineStyles to błąd czemu?
-@LineStyles = ((1) x $SensorTNo);
+draw_chart(\@data, \@legend, 40, -25, 13, $chart_t, "Temp/Dew point", "Temp. [C]" );
 
-for $s ( @Sensors ) {
-    @{$SDataH{$s}} = reverse @{$SDataH{$s}}; 
+# Humidity:
+
+my @data = \@TempDates;
+
+## if my @LineStyles error, why?
+@LineStyles = ((1) x ($#Sensors + 1));
+
+for $s ( @Sensors ) { @{$SDataH{$s}} = reverse @{$SDataH{$s}};
     push (@data, $SDataH{$s} ); }
-  
-@Kolory = ( 'red', 'blue', 'green', '#5CB3FF', 'black' ); # pierwsze trzy się liczą 
-@legend_All_Sensors = ("P", "O", "W");
 
-draw_chart(\@data,  \@legend_All_Sensors, 100, 0, 20, $chart__name__h, "Wilgotnosc", "Wilg. [%]" );
+@Kolory = @SensorColors[0..$#Sensors];
 
-##########
+my @legend = ();
+for $s ( @Sensors ) { push @legend, $SensorNames{$s} } 
+
+draw_chart(\@data, \@legend, 100, 0, 20, $chart_h, "Humidity", "Hum [%]" );
+
+### ### ###
 sub draw_chart {
-  my $data_ref = shift ; ## wskaznik do danych
-  my $legend_ref = shift ; ## wskaznik do legendy
+  my $data_ref = shift ;    ## ref. to data
+  my $legend_ref = shift ;  ## ref. to legend
 
-  my $y_max_value = shift ;
-  my $y_min_value = shift ;
+  my $y_max_value = shift ; ## max Y value
+  my $y_min_value = shift ; ## min Y value
   my $y_tick_number = shift ;
 
   my $chartname = shift;
   my $chart_title_name = shift;
-  my $y_label_name = shift;
+  my $y_label_txt = shift;
 
-  my @data = @$data_ref; ## dereferencing ref to local @data ;
-  my @legend_txt = @$legend_ref; ## ditto
+  my @data = @$data_ref; # dereferencing ref to local @data ;
+  my @legend_txt = @$legend_ref; # ditto
 
-  my $Lines_At_Chart_ = $#data +1;
+  # Add baseline if appropriate:
+  if ($y_min_value < 0) {
 
-  ## @sens = sort keys %STemp ; print STDERR "@TempDates\n"@sens\n@data\n";
-  ## dodac linie zera:
-  #
-  if ($y_min_value < 0) {## jeżeli wykres nie zawiera dolnej ćwiartki XY nie ma sensu
-     for ($i=0; $i<=$#TempDates; $i++) { push (@Zeros, 0) }
-     push (@data, \@Zeros ); $Lines_At_Chart_ +=1 }
+    for ($i=0; $i<=$#TempDates; $i++) { push (@Zeros, 0) }
+
+    push (@data, \@Zeros );
+    push (@LineStyles, $BaseLineStyle);
+    push (@Kolory, $BaselineKolor); ## Add baseline
+  }
 
   my $mygraph = GD::Graph::lines->new($chart_width,  $chart_height);
 
-  push (@LineStyles, $BaseLineStyle);
-
-  @Kolory = @Kolory[0..$Lines_At_Chart_]; push @Kolory, $BaselineKolor;
-  ##print STDERR ">>@LineStyles\n"; print STDERR ">>@Kolory\n";
-  my $chart_type = $mov_avg_pts> 0? "" : "";
-
   $mygraph->set_text_clr('black');
   $mygraph->set(
-    x_label     => 'Czas',
-    y_label     => $y_label_name,
-    title       => "$chart_title_name$chart_type: $lst_day--$fst_day",
+    x_label     => $x_label_txt,
+    y_label     => $y_label_txt,
+    title       => "$chart_title_name: $lst_day--$fst_day",
     long_ticks  => $long_ticks,  ### 1 or 0
     #
     # Draw datasets in 'solid', 'dashed' and 'dotted-dashed' lines
@@ -298,11 +288,9 @@ sub draw_chart {
 
   $mygraph->set_legend( @legend_txt ) ;
 
-  print STDERR "*** Liczba linii na wykresie: $#data ***\n";
-
   my $myimage = $mygraph->plot(\@data) or die $mygraph->error;
 
-  ## for cgi script uncomment: ## ### ###
+  ## for cgi script uncomment below: ## ### ###
   ##print "Content-type: image/png\n\n";
 
   open ( IMG, ">$chartname") or die " *** Problems opening: $chartname ***" ;
@@ -312,39 +300,37 @@ sub draw_chart {
   close (IMG);
 
   return ;
-} ## // ///
-
-
-
-## ### ###
-# approximation valid for
-# 0 degC < T < 60 degC
-# 1% < RH < 100%
-# 0 degC < Td < 50 degC 
-## ### ###
-## cf also: http://www.decatur.de/javascript/dew/index.html
-## ### ###
+} ## //draw_chart
 
 sub dewpoint_approximation {
-   my $T = shift ;  # Dry-bulb temperature C
-   my $Hr = shift ; # Relative humidity
 
-   my $a = 17.271 ;
-   my $b = 237.7 ; # degC
- 
-   return ( ($b * gamma($T, $Hr, $a, $b)) / ($a - gamma($T, $Hr, $a, $b)) )
-}
+  ## ### ###
+  # approximation valid for
+  # 0 degC < T < 60 degC
+  # 1% < RH < 100%
+  # 0 degC < Td < 50 degC 
+  ## ### ###
+  ## cf also: http://www.decatur.de/javascript/dew/index.html
+  ## ### ###
+
+  my $T = shift ;  # Dry-bulb temperature C
+  my $Hr = shift ; # Relative humidity
+
+  my $a = 17.271 ;
+  my $b = 237.7 ; # degC
+
+  return ( ($b * gamma($T, $Hr, $a, $b)) / ($a - gamma($T, $Hr, $a, $b)) )
+}##//dewpoint_approximation
 
 ## ### ###
 sub gamma {
-   my $x = shift ; 
-   my $h = shift ; 
+  my $x = shift ;
+  my $h = shift ;
 
-   my $a = shift ; 
-   my $b = shift ; 
-   ##print STDERR "**** $x $h $a $b ****\n";
+  my $a = shift ;
+  my $b = shift ;
 
-   return ( ($a * $x / ($b + $x)) + log ($h / 100.0) );
-}
+  return ( ($a * $x / ($b + $x)) + log ($h / 100.0) );
+}##//gamma
 
 ## ### ###
